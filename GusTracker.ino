@@ -1,13 +1,19 @@
 #include "src/rtc/DFRobot_DS1307.h"
-#include "Arduino.h"
+
+#include "src/eink/EPaper.h"
+#include "src/eink/FeederUI.h"
 
 // RTC
 DFRobot_DS1307 DS1307;
 // #define SET_RTC_TIME
 
+// E-INK
+EPaper154G epd;
+FeederUI ui(epd);
+
 // ISR
 volatile bool buttonPressed = false;
-int button_pin = 20;
+int button_pin = 2;
 void ARDUINO_ISR_ATTR  buttonISR();
 
 void setup() {
@@ -27,10 +33,10 @@ void setup() {
 
   // ------------------ RTC BEGIN ------------------
 
-  while( !(DS1307.begin()) ){
-    Serial.println("Communication with device failed, please check connection");
-    delay(3000);
-  }
+  // while( !(DS1307.begin()) ){
+  //   Serial.println("Communication with device failed, please check connection");
+  //   delay(3000);
+  // }
   Serial.println("RTC begin ok!");
 
   // Calibrate time. Must be flashed without calibration afterwards to prevent repeated time reset
@@ -44,6 +50,23 @@ void setup() {
   DS1307.setSqwPinMode(DS1307.eSquareWave_1Hz);
 
   // ------------------ RTC END ------------------
+
+  // ------------------ E-INK BEGIN ------------------
+
+  epd.begin(1);
+  ui.setTitle("GUS");
+  ui.update(BOX_TICK, BOX_EMPTY, BATT_FULL, "7:30 AM", "", true);
+
+  delay(5000);
+  ui.update(BOX_TICK, BOX_EMPTY, BATT_HALF, "7:30 AM", "", true);
+
+  delay(5000);
+  ui.update(BOX_TICK, BOX_EMPTY, BATT_LOW, "7:30 AM", "", true);
+
+  delay(5000);
+  ui.update(BOX_TICK, BOX_TICK, BATT_LOW, "7:30 AM", "", true);
+
+  // ------------------ E-INK END ------------------
 
 }
 
