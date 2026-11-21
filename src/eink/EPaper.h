@@ -36,13 +36,13 @@
 #define EPD_PIN_CS   20
 #endif
 #ifndef EPD_PIN_RST
-#define EPD_PIN_RST  3
+#define EPD_PIN_RST  21
 #endif
 #ifndef EPD_PIN_DC
 #define EPD_PIN_DC   4
 #endif
 #ifndef EPD_PIN_BUSY
-#define EPD_PIN_BUSY 2
+#define EPD_PIN_BUSY 5
 #endif
 
 // Print a message on Serial if the panel stops responding (1 = on, 0 = off)

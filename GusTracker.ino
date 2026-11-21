@@ -8,74 +8,58 @@ DFRobot_DS1307 DS1307;
 // #define SET_RTC_TIME
 
 // E-INK
+BoxState d1, d2;
+Battery d3;
 EPaper154G epd;
 FeederUI ui(epd);
 
+// VOLTAGE
+int vsense = 2;
+
 // ISR
-volatile bool buttonPressed = false;
-int button_pin = 2;
-void ARDUINO_ISR_ATTR  buttonISR();
+#define WAKE_GPIO GPIO_NUM_3
+RTC_DATA_ATTR volatile int buttonPressed = 0;
+int button_pin = 3;
 
 void setup() {
 
-  // ------------------ SERIAL BEGIN ------------------
+  // ------------------ SERIAL ------------------
 
   Serial.begin(9600);
 
-  // ------------------ SERIAL END ------------------
+  delay(3000);
 
-  // ------------------ ISR BEGIN ------------------
+  // ------------------ ISR ------------------
+
+  esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+  bool buttonWake = (cause == ESP_SLEEP_WAKEUP_GPIO);
+  bool firstBoot  = (cause == ESP_SLEEP_WAKEUP_UNDEFINED);   // power-on or reset
+
 
   pinMode(button_pin, INPUT);
-  attachInterrupt(button_pin, buttonISR, RISING);
 
-  // ------------------ ISR END ------------------
+  Serial.print(buttonPressed);
+  Serial.print(",");
 
-  // ------------------ RTC BEGIN ------------------
+  // ------------------ RTC ------------------
 
-  // while( !(DS1307.begin()) ){
-  //   Serial.println("Communication with device failed, please check connection");
-  //   delay(3000);
-  // }
+  while( !(DS1307.begin()) ){
+    Serial.println("Communication with device failed, please check connection");
+    delay(3000);
+  }
   Serial.println("RTC begin ok!");
-
-  // Calibrate time. Must be flashed without calibration afterwards to prevent repeated time reset
+  // Calibrate module. Must be flashed without calibration afterwards to prevent repeated time reset
   #ifdef SET_RTC_TIME
     uint16_t setTimeBuff[7] = {5, 1, 7, 6, 9, 9, 2021};
     DS1307.setTime(setTimeBuff);
+    // Start 1 Hz
+    DS1307.start();
+    DS1307.setSqwPinMode(DS1307.eSquareWave_1Hz);
   #endif
 
-  // Start 1 Hz
-  DS1307.start();
-  DS1307.setSqwPinMode(DS1307.eSquareWave_1Hz);
-
-  // ------------------ RTC END ------------------
-
-  // ------------------ E-INK BEGIN ------------------
-
-  epd.begin(1);
-  ui.setTitle("GUS");
-  ui.update(BOX_TICK, BOX_EMPTY, BATT_FULL, "7:30 AM", "", true);
-
-  delay(5000);
-  ui.update(BOX_TICK, BOX_EMPTY, BATT_HALF, "7:30 AM", "", true);
-
-  delay(5000);
-  ui.update(BOX_TICK, BOX_EMPTY, BATT_LOW, "7:30 AM", "", true);
-
-  delay(5000);
-  ui.update(BOX_TICK, BOX_TICK, BATT_LOW, "7:30 AM", "", true);
-
-  // ------------------ E-INK END ------------------
-
-}
-
-void loop() {
-  
-  // Read time
+  // Print time
   uint16_t getTimeBuff[7] = {0};
   DS1307.getTime(getTimeBuff);
-  // Print time
   char outputarr[128];
   sprintf(outputarr, "time: %d/%d/%d-%d %d:%d:%d\r\n",
             getTimeBuff[6],
@@ -86,17 +70,44 @@ void loop() {
             getTimeBuff[1],
             getTimeBuff[0]
             );
-  //Serial.print(outputarr);
+  Serial.print(outputarr);
 
-  if (buttonPressed) {
-    buttonPressed = false;
-    Serial.println("BUTTON");
+  // ------------------ VSENSE BEGIN ------------------
+
+  analogReadResolution(12);
+  pinMode(vsense, INPUT);
+
+  // Battery Voltage
+  long vbat = analogReadMilliVolts(vsense) * 1.36; // Reverse voltage divider
+  int percentage = map(vbat, 3500, 4000, 10, 90); // Map to a battery percentage 10-100%
+  Serial.print(vbat);
+  Serial.print(",");
+  Serial.println(percentage);
+
+  if (percentage > 65) d3 = BATT_FULL;
+  else if (percentage > 25) d3 = BATT_HALF;
+  else d3 = BATT_LOW;
+
+  // ------------------ E-INK BEGIN ------------------
+
+  epd.begin(1);
+  ui.setTitle("GUS");
+  if (buttonWake || firstBoot) {
+    if (buttonWake) buttonPressed = (buttonPressed + 1) % 3;
+    d1 = (buttonPressed != 0) ? BOX_TICK : BOX_EMPTY;
+    d2 = (buttonPressed == 2) ? BOX_TICK : BOX_EMPTY;
+    ui.update(d1, d2, d3, "", "", true);
   }
 
-  // Short delay
-  delay(50);
+  // ------------------ SLEEP ------------------
+
+  while (digitalRead(button_pin)) delay(10);   // don't sleep while the button is still held
+  esp_deep_sleep_enable_gpio_wakeup((1ULL << WAKE_GPIO), ESP_GPIO_WAKEUP_GPIO_HIGH);
+  esp_deep_sleep_start();
+
 }
 
-void ARDUINO_ISR_ATTR buttonISR() {
-  buttonPressed = true;
+void loop() {
+  Serial.println("SHOULD NEVER REACH HERE");
+  delay(1000);
 }
